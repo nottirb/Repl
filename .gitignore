@@ -1,2 +1,5 @@
-**/Packages
-**/Packages/**
+Packages
+Packages/**
+
+build
+build/**
