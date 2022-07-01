@@ -1,4 +1,8 @@
-gitRepoUrl = "https://github.com/Kobold-Games/Repl"
+gitSourceBranch = "main"
+changelog = false
+
+[[classOrder]]
+classes = ["Repl"]
 
 [[classOrder]]
 section = "Server"
@@ -9,4 +13,7 @@ section = "Client"
 classes = ["ClientRepl", "ClientRemoteSignal", "ClientRemoteProperty"]
 
 [docusaurus]
+onBrokenLinks = "throw"
+onBrokenMarkdownLinks = "warn"
+url = "https://nottirb.com"
 tagline = "Replication library for Roblox"
