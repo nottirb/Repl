@@ -13,8 +13,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
         with:
-          node-version: "16"
-      - run: npm i -g moonwave@latest
+          node-version: "14"
+      - run: npm i -g moonwave@0.3.6
       - name: Publish
         run: |
           git remote set-url origin https://git:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
