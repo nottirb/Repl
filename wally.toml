@@ -1,0 +1,12 @@
+[package]
+name = "nottirb/repl"
+version = "0.0.1-beta"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+exclude = ["**"]
+include = ["src", "src/**", "LICENSE", "default.project.json", "wally.toml"]
+
+[dependencies]
+Signal = "sleitnick/signal@1.2.0"
+Promise = "evaera/promise@4.0.0"

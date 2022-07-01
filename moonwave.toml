@@ -1,0 +1,15 @@
+gitRepoUrl = "https://github.com/Kobold-Games/Repl"
+
+[[classOrder]]
+classes = ["Repl"]
+
+[[classOrder]]
+section = "Server"
+classes = ["ServerRepl", "RemoteSignal", "RemoteProperty"]
+
+[[classOrder]]
+section = "Client"
+classes = ["ClientRepl", "ClientRemoteSignal", "ClientRemoteProperty"]
+
+[docusaurus]
+tagline = "Replication library for Roblox"
