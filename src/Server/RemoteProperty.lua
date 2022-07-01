@@ -1,12 +1,13 @@
 -- RemoteProperty
 -- Stephen Leitnick, Britton
--- December 20, 2021
+-- June 30, 2022
 
 local Players = game:GetService("Players")
 
 local Util = require(script.Parent.Parent.Util)
 local Types = require(script.Parent.Parent.Types)
 local RemoteSignal = require(script.Parent.RemoteSignal)
+local Signal = require(script.Parent.Parent.Parent.Signal)
 
 local None = Util.None
 
@@ -32,6 +33,10 @@ local None = Util.None
 	- Getting data
 		- `Get`: Retrieves the "top" value
 		- `GetFor`: Gets the current value for the given player. If cleared, returns the top value.
+	- Observing data
+		- `Observe`: Observes the "top" value.
+		- `ObserveFor`: Observes the current value for the given player. If cleared, observes the top value.
+		- `ObserveAll`: Observes the current value individually for all players.
 
 	:::caution Network
 	Calling any of the data setter methods (e.g. `Set()`) will
@@ -59,10 +64,27 @@ function RemoteProperty.new(
 )
 	local self = setmetatable({}, RemoteProperty)
 	self._rs = RemoteSignal.new(parent, name, inboundMiddleware, outboundMiddleware)
+	self._playerSignal = Signal.new()
+	self._topSignal = Signal.new()
 	self._value = initialValue
-	self._perPlayer = {}
+	self._playerEvents = {}
 	self._playerRemoving = Players.PlayerRemoving:Connect(function(player)
 		self._perPlayer[player] = nil
+		local playerEvent = self._playerEvents[player]
+		if playerEvent ~= nil then
+			playerEvent:Destroy()
+			self._playerEvents[player] = nil
+		end
+	end)
+	self._playerAdded = Players.PlayerAdded:Connect(function(player)
+		task.defer(function()
+			local value = self:GetFor(player)
+			self._playerSignal:Fire(player, value)
+			local playerEvent = self._playerEvents[player]
+			if playerEvent ~= nil then
+				playerEvent:Fire(value)
+			end
+		end)
 	end)
 	self._rs:Connect(function(player)
 		local playerValue = self._perPlayer[player]
@@ -74,7 +96,7 @@ end
 
 --[=[
 	Sets the top-level value of all clients to the same value.
-	
+
 	:::note Override Per-Player Data
 	This will override any per-player data that was set using
 	`SetFor` or `SetFilter`. To avoid overriding this data,
@@ -90,8 +112,27 @@ end
 ]=]
 function RemoteProperty:Set(value: any)
 	self._value = value
+	local dontUpdate = {}
+	for player, playerValue in pairs(self._perPlayer) do
+		if playerValue == value then
+			dontUpdate[player] = true
+		end
+	end
 	table.clear(self._perPlayer)
-	self._rs:FireAll(value)
+	self._rs:FireFilter(function(player)
+		return dontUpdate[player] ~= true
+	end, value)
+	self._topSignal:Fire(value)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if dontUpdate[player] ~= true then
+			self._playerSignal:Fire(player, value)
+		end
+	end
+	for player, signal in next, self._playerEvents do
+		if dontUpdate[player] ~= true then
+			signal:Fire(value)
+		end
+	end
 end
 
 --[=[
@@ -120,8 +161,15 @@ function RemoteProperty:SetTop(value: any)
 	for _, player in ipairs(Players:GetPlayers()) do
 		if self._perPlayer[player] == nil then
 			self._rs:Fire(player, value)
+			self._playerSignal:Fire(player, value)
+
+			local playerEvent = self._playerEvents[player]
+			if playerEvent ~= nil then
+				playerEvent:Fire(value)
+			end
 		end
 	end
+	self._topSignal:Fire(value)
 end
 
 --[=[
@@ -165,6 +213,11 @@ function RemoteProperty:SetFor(player: Player, value: any)
 		self._perPlayer[player] = if value == nil then None else value
 	end
 	self._rs:Fire(player, value)
+	self._playerSignal:Fire(player, value)
+	local playerEvent = self._playerEvents[player]
+	if playerEvent ~= nil then
+		playerEvent:Fire(value)
+	end
 end
 
 --[=[
@@ -209,6 +262,11 @@ function RemoteProperty:ClearFor(player: Player)
 	end
 	self._perPlayer[player] = nil
 	self._rs:Fire(player, self._value)
+	self._playerSignal:Fire(player, self._value)
+	local playerEvent = self._playerEvents[player]
+	if playerEvent ~= nil then
+		playerEvent:Fire(self._value)
+	end
 end
 
 --[=[
@@ -285,11 +343,92 @@ function RemoteProperty:GetFor(player: Player): any
 end
 
 --[=[
+	@param observer (any) -> nil
+	@return Connection
+
+	Observes the "top" value of the property. The observer will
+	be called right with the initial value, and
+	every time the value changes.
+
+	```lua
+	local function ObserveValue(value)
+		print(value)
+	end
+
+	remoteProperty:Observe(ObserveValue)
+	```
+]=]
+function RemoteProperty:Observe(observer: (any) -> ())
+	task.defer(observer, self._value)
+	return self._topSignal:Connect(observer)
+end
+
+--[=[
+	@param player Player
+	@param observer (any) -> nil
+	@return Connection
+
+	Observes the current value for the given player. This value
+	will depend on if `SetFor` or `SetFilter` has affected the
+	custom value for the player. If so, that custom value will
+	be returned. Otherwise, the top-level value will be used
+	(e.g. value from `Set`).
+
+	```lua
+	local function ObserveValue(value)
+		print(value)
+	end
+
+	remoteProperty:ObserveFor(player, ObserveValue)
+	```
+]=]
+function RemoteProperty:ObserveFor(player: Player, observer: (any) -> ())
+	task.defer(observer, self:GetFor(player))
+
+	local event = self._playerEvents[player]
+	if not event then
+		event = Signal.new()
+		self._playerEvents[player] = event
+	end
+end
+
+--[=[
+	@param observer (Player, any) -> nil
+	@return Connection
+
+	Observes the current value for all players. This value for
+	will depend on if `SetFor` or `SetFilter` has affected the
+	custom value for each player. If so, that custom value will
+	be used. Otherwise, the top-level value will be used
+	(e.g. value from `Set`).
+
+	```lua
+	local function ObservePlayerValue(player, value)
+		print(player, value)
+	end
+
+	remoteProperty:ObserveAll(ObservePlayerValue)
+	```
+]=]
+function RemoteProperty:ObserveAll(observer: (Player, any) -> ())
+	for _, player in ipairs(Players:GetPlayers()) do
+		task.defer(observer, player, self:GetFor(player))
+	end
+	return self._playerSignal:Connect(observer)
+end
+
+--[=[
 	Destroys the RemoteProperty object.
 ]=]
 function RemoteProperty:Destroy()
 	self._rs:Destroy()
+	self._playerSignal:Destroy()
+	self._topSignal:Destroy()
 	self._playerRemoving:Disconnect()
+	self._playerAdded:Disconnect()
+	for _player, event in next, self._playerEvents do
+		event:Destroy()
+	end
 end
 
 return RemoteProperty
