@@ -16,7 +16,7 @@ registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 
 [dependencies]
-Repl = "nottirb/repl@0.0.1-beta"
+Repl = "nottirb/repl@0.0.2-beta"
 ```
 
 To install these dependencies, run `wally install` within your project. Wally will create a Package folder in your directory with the installed dependencies.
